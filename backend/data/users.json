@@ -1,0 +1,34 @@
+{
+  "users": [
+    {
+      "id": "dfe8e026-ab1d-495f-8537-712094163df6",
+      "username": "admin",
+      "password_hash": "$2b$12$wxBpLp7L7GU1MtBntjmjx.N1l9XYa/l9oS5710yeEG4T5UEvZh/hu",
+      "role": "admin",
+      "name": "Administrador",
+      "email": "admin@ids.local",
+      "active": true,
+      "created_at": "2026-05-31T22:36:19.750425"
+    },
+    {
+      "id": "5b265e42-ead8-4f83-af15-7bd80089800f",
+      "username": "operador",
+      "password_hash": "$2b$12$2hRFPKa7ZmhXB.0KgiiTYexn7w/IxnhzOCKmnZlYvOT2QfslTmtGm",
+      "role": "operator",
+      "name": "Operador de Red",
+      "email": "operador@ids.local",
+      "active": true,
+      "created_at": "2026-05-31T22:36:20.106262"
+    },
+    {
+      "id": "3c8d1239-001b-4581-ac01-502d0af1a844",
+      "username": "abraham",
+      "password_hash": "$2b$12$sEXYnzgs8KqAsNecWm4SJuBHArkVR8u01N6X4NpJ3akHosI/.LHE2",
+      "role": "operator",
+      "name": "Abraham",
+      "email": "abrahamrobledo0402@gmail.com",
+      "active": true,
+      "created_at": "2026-05-31T22:47:53.007974"
+    }
+  ]
+}

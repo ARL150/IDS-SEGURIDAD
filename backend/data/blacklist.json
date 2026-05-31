@@ -1,0 +1,34 @@
+{
+  "threats": [
+    {
+      "ip": "185.220.101.0",
+      "type": "Botnet/TOR Exit Node",
+      "severity": "critical",
+      "description": "Nodo de salida TOR conocido"
+    },
+    {
+      "ip": "45.142.212.100",
+      "type": "Malware C2",
+      "severity": "critical",
+      "description": "Servidor de comando y control de malware"
+    },
+    {
+      "ip": "194.165.16.77",
+      "type": "Ransomware",
+      "severity": "critical",
+      "description": "IP asociada a distribución de ransomware"
+    },
+    {
+      "ip": "91.108.56.0",
+      "type": "Phishing",
+      "severity": "high",
+      "description": "Dominio de phishing activo"
+    },
+    {
+      "ip": "5.188.206.0",
+      "type": "Scanner/Brute Force",
+      "severity": "high",
+      "description": "Scanner masivo de puertos"
+    }
+  ]
+}

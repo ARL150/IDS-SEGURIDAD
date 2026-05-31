@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install *)",
+      "Bash(npm run *)",
+      "Bash(chmod +x \"/Users/abrahamrobledo/Documents/UNI/8VO/SEGURIDAD EN SISTEMAS/PROYECTO/backend/start.sh\")",
+      "Bash(pip install *)",
+      "Bash(pip3 install *)",
+      "Bash(python3 -c ' *)",
+      "Bash(python3 -c \"import fastapi, uvicorn, jose, bcrypt; print\\('Dependencias OK'\\)\")",
+      "Bash(python3 main.py)",
+      "Bash(curl -s -X POST http://localhost:8000/api/auth/login -H 'Content-Type: application/json' -d '{\"username\":\"admin\",\"password\":\"Admin\"}')",
+      "Bash(python3 -m json.tool)",
+      "Bash(python3 -c \"from scapy.all import IP, DNS; print\\('Scapy instalado correctamente ✓'\\)\")",
+      "Bash(python3 -c \"import os; print\\('Corriendo como root:', os.getuid\\(\\) == 0\\)\")"
+    ]
+  }
+}

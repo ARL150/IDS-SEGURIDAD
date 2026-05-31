@@ -1,0 +1,28 @@
+{
+  "devices": [
+    {
+      "ip": "192.168.1.1",
+      "mac": "AA:BB:CC:DD:EE:01",
+      "label": "Router principal",
+      "authorized": true
+    },
+    {
+      "ip": "192.168.1.100",
+      "mac": "AA:BB:CC:DD:EE:02",
+      "label": "Servidor Web",
+      "authorized": true
+    },
+    {
+      "ip": "17.33.201.202",
+      "mac": "c0:9f:e1:97:f4:78",
+      "label": "",
+      "authorized": true
+    },
+    {
+      "ip": "192.168.1.2",
+      "mac": "74:d4:23:24:5f:26",
+      "label": "192.168.1.2",
+      "authorized": true
+    }
+  ]
+}
