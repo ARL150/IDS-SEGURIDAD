@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+venv/
+.venv/
+*.egg-info/
+
+# Variables de entorno — NUNCA subir al repositorio
+backend/.env
+.env
+
+# Datos persistidos (contienen IPs privadas / info sensible)
+backend/data/users.json
+backend/data/feodo_cache.json
+
+# Node
+node_modules/
+ids/node_modules/
+ids/dist/
+
+# macOS
+.DS_Store
+.DS_Store?
+**/.DS_Store
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Claude Code
+.claude/
