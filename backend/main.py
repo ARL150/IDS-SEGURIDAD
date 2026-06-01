@@ -18,7 +18,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 
 from config import settings
-from modules import whitelist_module, site_monitor, threat_intel, forensics
+from modules import whitelist_module, site_monitor, threat_intel, forensics, blacklist as blacklist_module
 from modules.device_info import lookup, infer_from_hostname
 from modules.auth import (
     authenticate, create_access_token, create_user,
@@ -81,9 +81,32 @@ _system_state: Dict[str, Any] = {
 _sniffer_thread: Optional[threading.Thread] = None
 _detected_devices: Dict[str, dict] = {}
 _alert_log: List[dict] = []
+_feodo_alerted: set = set()  # IPs ya alertadas vía Feodo para no duplicar correos
 _packet_log: List[dict] = []
 _packet_lock = threading.Lock()
 _packet_counter = 0
+
+# Historial de tráfico: máximo 30 puntos (últimos 15 min a 30 s/punto)
+_traffic_history: List[dict] = []
+_last_history_ts: float = 0.0
+
+def _record_traffic_point():
+    """Guarda un punto de historial cada ~30 segundos."""
+    global _last_history_ts
+    import time
+    now = time.time()
+    if now - _last_history_ts < 30:
+        return
+    _last_history_ts = now
+    ts = datetime.now().strftime("%H:%M")
+    _traffic_history.append({
+        "time": ts,
+        "paquetes": _packet_counter,
+        "amenazas": sum(1 for a in _alert_log if a["type"] == "threat"),
+        "dispositivos": len(_detected_devices),
+    })
+    if len(_traffic_history) > 30:
+        _traffic_history.pop(0)
 
 
 # ─── Procesamiento de paquetes ─────────────────────────────────────────────────
@@ -166,6 +189,7 @@ def _process_packet(pkt) -> None:
             _detected_devices[src_ip]["last_seen"] = datetime.now().isoformat()
             _detected_devices[src_ip]["packets"] += 1
 
+        _record_traffic_point()
         threat = threat_intel.check_ip(dst_ip, src_ip)
         if threat:
             _add_alert("threat", f"Amenaza: {src_ip} → {dst_ip} [{threat['threat_type']}]",
@@ -175,6 +199,33 @@ def _process_packet(pkt) -> None:
                 args=(dst_ip, threat["threat_type"]),
                 daemon=True,
             ).start()
+
+        # Verificar contra blacklist Feodo Tracker + manual
+        if dst_ip and dst_ip not in _feodo_alerted:
+            feodo = blacklist_module.is_blacklisted(dst_ip)
+            if feodo:
+                _feodo_alerted.add(dst_ip)
+                threat_type = feodo.get("malware") or feodo.get("threat_type", "Botnet C2")
+                description = feodo.get("description", "IP en lista negra Feodo Tracker / blacklist manual")
+                from modules.alerts import alert_threat_detected
+                sent = alert_threat_detected(
+                    source_ip=src_ip or "desconocido",
+                    dest_ip=dst_ip,
+                    threat_type=f"[FEODO] {threat_type}",
+                    severity="critical",
+                    description=description,
+                )
+                _add_alert(
+                    "threat",
+                    f"[FEODO] {src_ip} → {dst_ip} [{threat_type}]",
+                    "critical",
+                    sent,
+                )
+                threading.Thread(
+                    target=forensics.run_forensic,
+                    args=(dst_ip, threat_type),
+                    daemon=True,
+                ).start()
 
     if SCAPY_AVAILABLE and pkt.haslayer(DNS) and pkt.haslayer(DNSQR):
         try:
@@ -263,6 +314,13 @@ class DeviceCreate(BaseModel):
 class ThreatCreate(BaseModel):
     ip: str
     threat_type: str
+    severity: str = "high"
+    description: str = ""
+
+
+class BlacklistCreate(BaseModel):
+    ip: str
+    threat_type: str = "Desconocido"
     severity: str = "high"
     description: str = ""
 
@@ -400,10 +458,16 @@ def start_capture(_: dict = Depends(require_admin)):
 @app.post("/api/stop")
 def stop_capture(_: dict = Depends(require_admin)):
     _system_state["running"] = False
+    _feodo_alerted.clear()
     return {"message": "Captura detenida"}
 
 
 # ── Dispositivos / Lista blanca ────────────────────────────────
+@app.get("/api/traffic-history")
+def get_traffic_history(_: dict = Depends(get_current_user)):
+    return _traffic_history
+
+
 @app.get("/api/devices")
 def get_devices(_: dict = Depends(get_current_user)):
     whitelist = {d["ip"]: d for d in whitelist_module.get_all_devices()}
@@ -564,6 +628,35 @@ def start_network_scan(_: dict = Depends(get_current_user)):
 
 
 
+# ── Lista Negra (Feodo Tracker + manual) ──────────────────────
+@app.get("/api/blacklist")
+def get_blacklist(
+    malware: str = "",
+    status: str = "",
+    country: str = "",
+    search: str = "",
+    _: dict = Depends(get_current_user),
+):
+    return blacklist_module.get_all(malware, status, country, search)
+
+
+@app.post("/api/blacklist")
+def add_blacklist(body: BlacklistCreate, _: dict = Depends(require_admin)):
+    return blacklist_module.add_manual(body.ip, body.threat_type, body.description, body.severity)
+
+
+@app.delete("/api/blacklist/{ip}")
+def remove_blacklist(ip: str, _: dict = Depends(require_admin)):
+    if not blacklist_module.delete_manual(ip):
+        raise HTTPException(404, f"Entrada manual para {ip} no encontrada")
+    return {"message": f"{ip} eliminado de la lista negra manual"}
+
+
+@app.post("/api/blacklist/refresh")
+def refresh_feodo(_: dict = Depends(require_admin)):
+    return blacklist_module.refresh_feed()
+
+
 # ── Alertas ────────────────────────────────────────────────────
 @app.get("/api/alerts")
 def get_alerts(limit: int = 100, _: dict = Depends(get_current_user)):
@@ -600,6 +693,39 @@ def get_config(_: dict = Depends(get_current_user)):
         "smtp_configured": bool(settings.smtp_user and settings.smtp_password),
         "abuseipdb_configured": bool(settings.abuseipdb_api_key),
     }
+
+
+@app.post("/api/alerts/test")
+def send_test_alert(_: dict = Depends(require_admin)):
+    """Envía un correo de prueba al ADMIN_EMAIL configurado en .env"""
+    from modules.alerts import _send_email
+    from datetime import datetime
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    sent = _send_email(
+        subject="[IDS] ✅ Prueba de alertas — Sistema funcionando",
+        body_html=f"""
+        <html><body style="font-family:monospace;background:#0d1117;color:#c9d1d9;padding:24px">
+        <h2 style="color:#3fb950">✅ Prueba de configuración de alertas</h2>
+        <p>Si recibes este correo, el sistema de alertas está correctamente configurado.</p>
+        <table border="1" cellpadding="8" style="border-collapse:collapse;color:#c9d1d9">
+          <tr><td><b>Timestamp</b></td><td>{ts}</td></tr>
+          <tr><td><b>Destino</b></td><td style="color:#3fb950">{settings.admin_email}</td></tr>
+          <tr><td><b>Servidor SMTP</b></td><td>{settings.smtp_host}:{settings.smtp_port}</td></tr>
+        </table>
+        <p>El IDS Institucional enviará alertas automáticas cuando detecte:</p>
+        <ul>
+          <li>🔴 Dispositivos no autorizados en la red</li>
+          <li>🚨 Conexiones a IPs de amenaza conocida (botnets, C2)</li>
+          <li>🔍 Reportes forenses generados</li>
+        </ul>
+        <p style="color:#8b949e;font-size:12px">IDS Institucional — Sistema Automático de Detección de Intrusos</p>
+        </body></html>
+        """,
+        to=settings.admin_email,
+    )
+    if sent:
+        return {"ok": True, "message": f"Correo de prueba enviado a {settings.admin_email}"}
+    raise HTTPException(status_code=500, detail="No se pudo enviar. Verifica SMTP_USER y SMTP_PASSWORD en el .env")
 
 
 # ── WebSocket ──────────────────────────────────────────────────
